@@ -1,0 +1,534 @@
+<!doctype html>
+<html lang="en">
+<head>
+  <meta charset="utf-8" />
+  <meta name="viewport" content="width=device-width, initial-scale=1" />
+  <title>Interactive Periodic Table · EN/SV · Bohr Model</title>
+  <style>
+    :root{
+      --bg:#0b0f17;         /* page background */
+      --panel:#121826;      /* cards/panels */
+      --muted:#93a0b5;      /* secondary text */
+      --text:#e6eefb;       /* primary text */
+      --accent:#6aa0ff;     /* focus/hover */
+      --grid-gap:6px;
+      --tile-size:72px;     /* base tile size */
+      --radius:16px;
+
+      /* category colors */
+      --c-alkali:#ff6b6b;
+      --c-alkaline:#ff9f43;
+      --c-transition:#4dd0e1;
+      --c-post:#feca57;
+      --c-metalloid:#78e08f;
+      --c-nonmetal:#c8d6e5;
+      --c-halogen:#a29bfe;
+      --c-noble:#55efc4;
+      --c-lanth:#00d2d3;
+      --c-act:#ff7675;
+      --c-unknown:#84817a;
+    }
+    *{box-sizing:border-box}
+    html,body{height:100%;}
+    body{margin:0;background:var(--bg);color:var(--text);font:16px/1.45 system-ui, -apple-system, Segoe UI, Roboto, Helvetica, Arial, "Apple Color Emoji","Segoe UI Emoji";}
+    .app{max-width:1200px;margin:0 auto;padding:24px;}
+    header{display:flex;align-items:center;gap:12px;justify-content:space-between;margin-bottom:16px}
+    h1{font-size:22px;margin:0;letter-spacing:.3px;font-weight:650}
+    .controls{display:flex;align-items:center;gap:10px}
+    .lang-toggle{background:var(--panel);border:1px solid #1d2433;color:var(--text);padding:8px 12px;border-radius:999px;cursor:pointer}
+    .lang-toggle:focus{outline:2px solid var(--accent);outline-offset:2px}
+    .legend{display:flex;flex-wrap:wrap;gap:8px;margin:8px 0 18px}
+    .chip{display:inline-flex;align-items:center;gap:8px;background:var(--panel);border:1px solid #1d2433;padding:6px 10px;border-radius:999px;font-size:12px;color:var(--muted)}
+    .dot{width:10px;height:10px;border-radius:50%}
+
+    .grid-wrap{background:transparent;border-radius:12px}
+    .grid{display:grid;grid-template-columns:repeat(18,minmax(0,1fr));gap:var(--grid-gap)}
+    .tile{position:relative;min-height:var(--tile-size);background:var(--panel);border:1px solid #1d2433;border-radius:12px;padding:6px;cursor:pointer;transition:transform .12s ease, border-color .12s ease, box-shadow .12s ease}
+    .tile:hover{transform:translateY(-2px);border-color:#2a3347;box-shadow:0 6px 18px rgba(0,0,0,.25)}
+    .tile:focus{outline:2px solid var(--accent);outline-offset:2px}
+    .num{position:absolute;top:6px;left:8px;font-size:10px;color:var(--muted)}
+    .sym{display:block;text-align:center;font-weight:700;font-size:22px;margin-top:10px}
+    .name{display:block;text-align:center;font-size:10px;color:var(--muted)}
+    .catbar{position:absolute;inset:auto 6px 6px 6px;height:3px;border-radius:2px;opacity:.9}
+
+    /* special rows */
+    .fblock{margin-top:18px}
+    .fblock h3{margin:12px 0 8px;font-size:12px;color:var(--muted);font-weight:600}
+    .fgrid{display:grid;grid-template-columns:repeat(15,minmax(0,1fr));gap:var(--grid-gap)}
+
+    /* Modal */
+    dialog{border:none;border-radius:20px;padding:0;background:transparent}
+    .overlay{position:fixed;inset:0;background:rgba(3,7,18,.72);backdrop-filter:blur(8px);display:flex;align-items:center;justify-content:center;padding:24px}
+    .modal{display:grid;grid-template-columns:380px minmax(360px,560px);gap:18px;width:min(100%,980px);background:var(--panel);border:1px solid #1d2433;border-radius:20px;padding:18px}
+    .modal h2{margin:0 0 10px}
+    .kvs{display:grid;grid-template-columns:1fr 1fr;gap:10px;margin-top:8px}
+    .kv{background:#0f1420;border:1px solid #1d2433;border-radius:12px;padding:10px}
+    .kv .label{font-size:11px;color:var(--muted)}
+    .kv .val{font-size:14px;margin-top:4px}
+    .close{position:absolute;top:14px;right:16px;background:#0f1420;border:1px solid #1d2433;color:var(--text);border-radius:10px;padding:6px 10px;cursor:pointer}
+
+    /* Atom viewer */
+    .viewer{background:#0b1020;border:1px solid #1d2433;border-radius:16px;position:relative;min-height:420px;display:flex;align-items:center;justify-content:center}
+    .viewer svg{width:100%;height:100%}
+    .nucleus{fill:#ff4d6d;opacity:.9}
+    .nucleus-label{font-size:12px;fill:#fff;opacity:.95}
+    .orbit{fill:none;stroke:#26324a;stroke-width:1.2}
+    .electron{fill:#6aa0ff}
+    .appear{animation:pop .3s ease forwards}
+    @keyframes pop{from{transform:scale(.6);opacity:0}to{transform:scale(1);opacity:1}}
+    @keyframes spin{from{transform:rotate(0)}to{transform:rotate(360deg)}}
+
+    /* responsive */
+    @media (max-width: 900px){
+      .modal{grid-template-columns:1fr}
+      .viewer{min-height:380px}
+    }
+  </style>
+</head>
+<body>
+  <div class="app" id="app" data-lang="en">
+    <header>
+      <h1 data-i18n="title">Interactive Periodic Table</h1>
+      <div class="controls">
+        <button class="lang-toggle" id="langBtn" aria-label="Toggle language">EN ▸ SV</button>
+      </div>
+    </header>
+
+    <div class="legend" id="legend"></div>
+
+    <section class="grid-wrap">
+      <div class="grid" id="mainGrid" aria-label="Periodic table grid" role="grid"></div>
+    </section>
+
+    <section class="fblock">
+      <h3 data-i18n="lanth">Lanthanides</h3>
+      <div class="fgrid" id="lanthGrid"></div>
+      <h3 data-i18n="act">Actinides</h3>
+      <div class="fgrid" id="actGrid"></div>
+    </section>
+  </div>
+
+  <dialog id="details">
+    <div class="overlay" role="dialog" aria-modal="true">
+      <div class="modal">
+        <button class="close" id="closeBtn">✕ <span data-i18n="close">Close</span></button>
+        <div>
+          <h2 id="elTitle">Element</h2>
+          <div class="kvs">
+            <div class="kv"><div class="label" data-i18n="atomic">Atomic number</div><div class="val" id="kvZ">—</div></div>
+            <div class="kv"><div class="label" data-i18n="category">Category</div><div class="val" id="kvCat">—</div></div>
+            <div class="kv"><div class="label" data-i18n="protons">Protons</div><div class="val" id="kvP">—</div></div>
+            <div class="kv"><div class="label" data-i18n="electrons">Electrons</div><div class="val" id="kvE">—</div></div>
+            <div class="kv" style="grid-column:span 2"><div class="label" data-i18n="bohr">Bohr model shells (simplified)</div><div class="val" id="kvShells">—</div></div>
+          </div>
+          <p style="font-size:12px;color:var(--muted);margin-top:10px" data-i18n="disclaimer">Note: This viewer uses the simple Bohr model (2n² per shell). Real electron configurations follow quantum subshell rules and differ for many elements.</p>
+        </div>
+        <div class="viewer" id="viewer" aria-label="Atom viewer"></div>
+      </div>
+    </div>
+  </dialog>
+
+  <script>
+    // ===== i18n =====
+    const I18N = {
+      en:{
+        title:"Interactive Periodic Table",
+        lanth:"Lanthanides",
+        act:"Actinides",
+        close:"Close",
+        atomic:"Atomic number",
+        category:"Category",
+        protons:"Protons",
+        electrons:"Electrons",
+        bohr:"Bohr model shells (simplified)",
+        disclaimer:"Note: This viewer uses the simple Bohr model (2n² per shell). Real electron configurations follow quantum subshell rules and differ for many elements.",
+        legend:{
+          alkali:"Alkali metal",
+          alkaline:"Alkaline earth metal",
+          transition:"Transition metal",
+          post:"Post-transition metal",
+          metalloid:"Metalloid",
+          nonmetal:"Other nonmetal",
+          halogen:"Halogen",
+          noble:"Noble gas",
+          lanth:"Lanthanide",
+          act:"Actinide",
+          unknown:"Unknown/other"
+        }
+      },
+      sv:{
+        title:"Interaktivt Periodiskt System",
+        lanth:"Lantanoider",
+        act:"Aktinoider",
+        close:"Stäng",
+        atomic:"Atomnummer",
+        category:"Kategori",
+        protons:"Protoner",
+        electrons:"Elektroner",
+        bohr:"Bohr-modellens skal (förenklad)",
+        disclaimer:"Obs: Visaren använder den förenklade Bohr-modellen (2n² per skal). Verkliga elektronkonfigurationer följer kvantskal/regler och skiljer sig för många grundämnen.",
+        legend:{
+          alkali:"Alkalimetall",
+          alkaline:"Jordalkalimetall",
+          transition:"Övergångsmetall",
+          post:"Post-övergångsmetall",
+          metalloid:"Halvmetall",
+          nonmetal:"Icke-metall",
+          halogen:"Halogen",
+          noble:"Ädelgas",
+          lanth:"Lantanoid",
+          act:"Aktinoid",
+          unknown:"Okänd/övrigt"
+        }
+      }
+    };
+
+    function setLang(lang){
+      document.getElementById('app').dataset.lang = lang;
+      const dict = I18N[lang];
+      document.querySelectorAll('[data-i18n]').forEach(el=>{
+        const key = el.getAttribute('data-i18n');
+        const parts = key.split('.');
+        let val = dict;
+        for(const p of parts){ val = val?.[p]; }
+        if(typeof val === 'string') el.textContent = val;
+      });
+      renderLegend();
+      document.getElementById('langBtn').textContent = lang==='en' ? 'EN ▸ SV' : 'SV ▸ EN';
+    }
+
+    document.getElementById('langBtn').addEventListener('click',()=>{
+      const cur = document.getElementById('app').dataset.lang || 'en';
+      setLang(cur==='en'?'sv':'en');
+    });
+
+    // ===== Element dataset =====
+    // Minimal fields for layout and info
+    // category: alkali, alkaline, transition, post, metalloid, nonmetal, halogen, noble, lanth, act, unknown
+
+    const E = [
+      {Z:1, sym:'H',  name:'Hydrogen', group:1,  period:1, cat:'nonmetal'},
+      {Z:2, sym:'He', name:'Helium',   group:18, period:1, cat:'noble'},
+      {Z:3, sym:'Li', name:'Lithium',  group:1,  period:2, cat:'alkali'},
+      {Z:4, sym:'Be', name:'Beryllium',group:2,  period:2, cat:'alkaline'},
+      {Z:5, sym:'B',  name:'Boron',    group:13, period:2, cat:'metalloid'},
+      {Z:6, sym:'C',  name:'Carbon',   group:14, period:2, cat:'nonmetal'},
+      {Z:7, sym:'N',  name:'Nitrogen', group:15, period:2, cat:'nonmetal'},
+      {Z:8, sym:'O',  name:'Oxygen',   group:16, period:2, cat:'nonmetal'},
+      {Z:9, sym:'F',  name:'Fluorine', group:17, period:2, cat:'halogen'},
+      {Z:10,sym:'Ne', name:'Neon',     group:18, period:2, cat:'noble'},
+      {Z:11,sym:'Na', name:'Sodium',   group:1,  period:3, cat:'alkali'},
+      {Z:12,sym:'Mg', name:'Magnesium',group:2,  period:3, cat:'alkaline'},
+      {Z:13,sym:'Al', name:'Aluminium',group:13, period:3, cat:'post'},
+      {Z:14,sym:'Si', name:'Silicon',  group:14, period:3, cat:'metalloid'},
+      {Z:15,sym:'P',  name:'Phosphorus',group:15,period:3, cat:'nonmetal'},
+      {Z:16,sym:'S',  name:'Sulfur',   group:16, period:3, cat:'nonmetal'},
+      {Z:17,sym:'Cl', name:'Chlorine', group:17, period:3, cat:'halogen'},
+      {Z:18,sym:'Ar', name:'Argon',    group:18, period:3, cat:'noble'},
+      {Z:19,sym:'K',  name:'Potassium',group:1,  period:4, cat:'alkali'},
+      {Z:20,sym:'Ca', name:'Calcium',  group:2,  period:4, cat:'alkaline'},
+      {Z:21,sym:'Sc', name:'Scandium', group:3,  period:4, cat:'transition'},
+      {Z:22,sym:'Ti', name:'Titanium', group:4,  period:4, cat:'transition'},
+      {Z:23,sym:'V',  name:'Vanadium', group:5,  period:4, cat:'transition'},
+      {Z:24,sym:'Cr', name:'Chromium', group:6,  period:4, cat:'transition'},
+      {Z:25,sym:'Mn', name:'Manganese',group:7,  period:4, cat:'transition'},
+      {Z:26,sym:'Fe', name:'Iron',     group:8,  period:4, cat:'transition'},
+      {Z:27,sym:'Co', name:'Cobalt',   group:9,  period:4, cat:'transition'},
+      {Z:28,sym:'Ni', name:'Nickel',   group:10, period:4, cat:'transition'},
+      {Z:29,sym:'Cu', name:'Copper',   group:11, period:4, cat:'transition'},
+      {Z:30,sym:'Zn', name:'Zinc',     group:12, period:4, cat:'transition'},
+      {Z:31,sym:'Ga', name:'Gallium',  group:13, period:4, cat:'post'},
+      {Z:32,sym:'Ge', name:'Germanium',group:14, period:4, cat:'metalloid'},
+      {Z:33,sym:'As', name:'Arsenic',  group:15, period:4, cat:'metalloid'},
+      {Z:34,sym:'Se', name:'Selenium', group:16, period:4, cat:'nonmetal'},
+      {Z:35,sym:'Br', name:'Bromine',  group:17, period:4, cat:'halogen'},
+      {Z:36,sym:'Kr', name:'Krypton',  group:18, period:4, cat:'noble'},
+      {Z:37,sym:'Rb', name:'Rubidium', group:1,  period:5, cat:'alkali'},
+      {Z:38,sym:'Sr', name:'Strontium',group:2,  period:5, cat:'alkaline'},
+      {Z:39,sym:'Y',  name:'Yttrium',  group:3,  period:5, cat:'transition'},
+      {Z:40,sym:'Zr', name:'Zirconium',group:4,  period:5, cat:'transition'},
+      {Z:41,sym:'Nb', name:'Niobium',  group:5,  period:5, cat:'transition'},
+      {Z:42,sym:'Mo', name:'Molybdenum',group:6, period:5, cat:'transition'},
+      {Z:43,sym:'Tc', name:'Technetium',group:7, period:5, cat:'transition'},
+      {Z:44,sym:'Ru', name:'Ruthenium',group:8,  period:5, cat:'transition'},
+      {Z:45,sym:'Rh', name:'Rhodium',  group:9,  period:5, cat:'transition'},
+      {Z:46,sym:'Pd', name:'Palladium',group:10, period:5, cat:'transition'},
+      {Z:47,sym:'Ag', name:'Silver',   group:11, period:5, cat:'transition'},
+      {Z:48,sym:'Cd', name:'Cadmium',  group:12, period:5, cat:'transition'},
+      {Z:49,sym:'In', name:'Indium',   group:13, period:5, cat:'post'},
+      {Z:50,sym:'Sn', name:'Tin',      group:14, period:5, cat:'post'},
+      {Z:51,sym:'Sb', name:'Antimony', group:15, period:5, cat:'metalloid'},
+      {Z:52,sym:'Te', name:'Tellurium',group:16, period:5, cat:'metalloid'},
+      {Z:53,sym:'I',  name:'Iodine',   group:17, period:5, cat:'halogen'},
+      {Z:54,sym:'Xe', name:'Xenon',    group:18, period:5, cat:'noble'},
+      {Z:55,sym:'Cs', name:'Caesium',  group:1,  period:6, cat:'alkali'},
+      {Z:56,sym:'Ba', name:'Barium',   group:2,  period:6, cat:'alkaline'},
+      // Lanthanides 57-71 in separate row (La..Lu)
+      {Z:72,sym:'Hf', name:'Hafnium',  group:4,  period:6, cat:'transition'},
+      {Z:73,sym:'Ta', name:'Tantalum', group:5,  period:6, cat:'transition'},
+      {Z:74,sym:'W',  name:'Tungsten', group:6,  period:6, cat:'transition'},
+      {Z:75,sym:'Re', name:'Rhenium',  group:7,  period:6, cat:'transition'},
+      {Z:76,sym:'Os', name:'Osmium',   group:8,  period:6, cat:'transition'},
+      {Z:77,sym:'Ir', name:'Iridium',  group:9,  period:6, cat:'transition'},
+      {Z:78,sym:'Pt', name:'Platinum', group:10, period:6, cat:'transition'},
+      {Z:79,sym:'Au', name:'Gold',     group:11, period:6, cat:'transition'},
+      {Z:80,sym:'Hg', name:'Mercury',  group:12, period:6, cat:'transition'},
+      {Z:81,sym:'Tl', name:'Thallium', group:13, period:6, cat:'post'},
+      {Z:82,sym:'Pb', name:'Lead',     group:14, period:6, cat:'post'},
+      {Z:83,sym:'Bi', name:'Bismuth',  group:15, period:6, cat:'post'},
+      {Z:84,sym:'Po', name:'Polonium', group:16, period:6, cat:'metalloid'},
+      {Z:85,sym:'At', name:'Astatine', group:17, period:6, cat:'halogen'},
+      {Z:86,sym:'Rn', name:'Radon',    group:18, period:6, cat:'noble'},
+      {Z:87,sym:'Fr', name:'Francium', group:1,  period:7, cat:'alkali'},
+      {Z:88,sym:'Ra', name:'Radium',   group:2,  period:7, cat:'alkaline'},
+      // Actinides 89-103 separate row (Ac..Lr)
+      {Z:104,sym:'Rf', name:'Rutherfordium',group:4,period:7,cat:'transition'},
+      {Z:105,sym:'Db', name:'Dubnium', group:5,  period:7, cat:'transition'},
+      {Z:106,sym:'Sg', name:'Seaborgium',group:6,period:7, cat:'transition'},
+      {Z:107,sym:'Bh', name:'Bohrium', group:7,  period:7, cat:'transition'},
+      {Z:108,sym:'Hs', name:'Hassium', group:8,  period:7, cat:'transition'},
+      {Z:109,sym:'Mt', name:'Meitnerium',group:9,period:7, cat:'transition'},
+      {Z:110,sym:'Ds', name:'Darmstadtium',group:10,period:7,cat:'transition'},
+      {Z:111,sym:'Rg', name:'Roentgenium',group:11,period:7,cat:'transition'},
+      {Z:112,sym:'Cn', name:'Copernicium',group:12,period:7,cat:'transition'},
+      {Z:113,sym:'Nh', name:'Nihonium', group:13, period:7, cat:'post'},
+      {Z:114,sym:'Fl', name:'Flerovium',group:14, period:7, cat:'post'},
+      {Z:115,sym:'Mc', name:'Moscovium',group:15, period:7, cat:'post'},
+      {Z:116,sym:'Lv', name:'Livermorium',group:16,period:7, cat:'post'},
+      {Z:117,sym:'Ts', name:'Tennessine',group:17, period:7, cat:'halogen'},
+      {Z:118,sym:'Og', name:'Oganesson', group:18, period:7, cat:'noble'},
+    ];
+
+    const LANTH = [
+      {Z:57,sym:'La',name:'Lanthanum',cat:'lanth'},
+      {Z:58,sym:'Ce',name:'Cerium',cat:'lanth'},
+      {Z:59,sym:'Pr',name:'Praseodymium',cat:'lanth'},
+      {Z:60,sym:'Nd',name:'Neodymium',cat:'lanth'},
+      {Z:61,sym:'Pm',name:'Promethium',cat:'lanth'},
+      {Z:62,sym:'Sm',name:'Samarium',cat:'lanth'},
+      {Z:63,sym:'Eu',name:'Europium',cat:'lanth'},
+      {Z:64,sym:'Gd',name:'Gadolinium',cat:'lanth'},
+      {Z:65,sym:'Tb',name:'Terbium',cat:'lanth'},
+      {Z:66,sym:'Dy',name:'Dysprosium',cat:'lanth'},
+      {Z:67,sym:'Ho',name:'Holmium',cat:'lanth'},
+      {Z:68,sym:'Er',name:'Erbium',cat:'lanth'},
+      {Z:69,sym:'Tm',name:'Thulium',cat:'lanth'},
+      {Z:70,sym:'Yb',name:'Ytterbium',cat:'lanth'},
+      {Z:71,sym:'Lu',name:'Lutetium',cat:'lanth'},
+    ];
+
+    const ACT = [
+      {Z:89,sym:'Ac',name:'Actinium',cat:'act'},
+      {Z:90,sym:'Th',name:'Thorium',cat:'act'},
+      {Z:91,sym:'Pa',name:'Protactinium',cat:'act'},
+      {Z:92,sym:'U', name:'Uranium',cat:'act'},
+      {Z:93,sym:'Np',name:'Neptunium',cat:'act'},
+      {Z:94,sym:'Pu',name:'Plutonium',cat:'act'},
+      {Z:95,sym:'Am',name:'Americium',cat:'act'},
+      {Z:96,sym:'Cm',name:'Curium',cat:'act'},
+      {Z:97,sym:'Bk',name:'Berkelium',cat:'act'},
+      {Z:98,sym:'Cf',name:'Californium',cat:'act'},
+      {Z:99,sym:'Es',name:'Einsteinium',cat:'act'},
+      {Z:100,sym:'Fm',name:'Fermium',cat:'act'},
+      {Z:101,sym:'Md',name:'Mendelevium',cat:'act'},
+      {Z:102,sym:'No',name:'Nobelium',cat:'act'},
+      {Z:103,sym:'Lr',name:'Lawrencium',cat:'act'},
+    ];
+
+    // color helpers
+    const CAT_COLOR = {
+      alkali:'var(--c-alkali)',
+      alkaline:'var(--c-alkaline)',
+      transition:'var(--c-transition)',
+      post:'var(--c-post)',
+      metalloid:'var(--c-metalloid)',
+      nonmetal:'var(--c-nonmetal)',
+      halogen:'var(--c-halogen)',
+      noble:'var(--c-noble)',
+      lanth:'var(--c-lanth)',
+      act:'var(--c-act)',
+      unknown:'var(--c-unknown)'
+    };
+
+    function renderLegend(){
+      const lang = document.getElementById('app').dataset.lang || 'en';
+      const map = [
+        ['alkali'],['alkaline'],['transition'],['post'],['metalloid'],['nonmetal'],['halogen'],['noble'],['lanth'],['act']
+      ];
+      const wrap = document.getElementById('legend');
+      wrap.innerHTML = '';
+      for(const [key] of map){
+        const chip = document.createElement('div');
+        chip.className = 'chip';
+        chip.innerHTML = `<span class="dot" style="background:${CAT_COLOR[key]}"></span><span data-i18n="legend.${key}">${I18N[lang].legend[key]}</span>`;
+        wrap.appendChild(chip);
+      }
+    }
+
+    function makeTile(el){
+      const div = document.createElement('button');
+      div.className = 'tile';
+      div.setAttribute('role','gridcell');
+      div.style.gridColumn = el.group;
+      div.style.gridRow = el.period;
+      div.dataset.z = el.Z;
+      div.dataset.cat = el.cat;
+      div.innerHTML = `
+        <span class="num">${el.Z}</span>
+        <span class="sym">${el.sym}</span>
+        <span class="name">${el.name}</span>
+        <span class="catbar" style="background:${CAT_COLOR[el.cat]}"></span>
+      `;
+      div.addEventListener('click',()=>openDetails(el));
+      return div;
+    }
+
+    function makeSmallTile(el){
+      const div = document.createElement('button');
+      div.className = 'tile';
+      div.style.minHeight = '64px';
+      div.dataset.z = el.Z;
+      div.dataset.cat = el.cat;
+      div.innerHTML = `
+        <span class="num">${el.Z}</span>
+        <span class="sym">${el.sym}</span>
+        <span class="name">${el.name}</span>
+        <span class="catbar" style="background:${CAT_COLOR[el.cat]}"></span>
+      `;
+      div.addEventListener('click',()=>openDetails(el));
+      return div;
+    }
+
+    function renderGrids(){
+      const main = document.getElementById('mainGrid');
+      main.innerHTML = '';
+      // Fill with empty spacers so grid keeps shape for periods 1-3
+      for(const el of E){ main.appendChild(makeTile(el)); }
+
+      const lg = document.getElementById('lanthGrid');
+      lg.innerHTML = '';
+      LANTH.forEach(e=>lg.appendChild(makeSmallTile(e)));
+
+      const ag = document.getElementById('actGrid');
+      ag.innerHTML = '';
+      ACT.forEach(e=>ag.appendChild(makeSmallTile(e)));
+    }
+
+    // ===== Bohr shells =====
+    function bohrShells(Z){
+      const caps = [2, 8, 18, 32, 50, 72, 98]; // 2n^2 up to n=7
+      const shells = [];
+      let left = Z;
+      for(let i=0;i<caps.length && left>0;i++){
+        const put = Math.min(left, caps[i]);
+        shells.push(put);
+        left -= put;
+      }
+      return shells; // e.g., [2,8,1]
+    }
+
+    // ===== Atom viewer (SVG) =====
+    function drawAtom(container, Z){
+      container.innerHTML = '';
+      const w = container.clientWidth || 520;
+      const h = container.clientHeight || 420;
+      const size = Math.min(w,h);
+      const cx = w/2, cy = h/2;
+
+      const shells = bohrShells(Z);
+      const svg = document.createElementNS('http://www.w3.org/2000/svg','svg');
+      svg.setAttribute('viewBox',`0 0 ${w} ${h}`);
+
+      // Nucleus
+      const nucleus = document.createElementNS('http://www.w3.org/2000/svg','circle');
+      const rN = Math.max(10, size*0.045 + Math.min(Z,40)*0.12); // stylized radius by Z
+      nucleus.setAttribute('cx',cx);
+      nucleus.setAttribute('cy',cy);
+      nucleus.setAttribute('r',rN);
+      nucleus.setAttribute('class','nucleus appear');
+      svg.appendChild(nucleus);
+
+      const nLabel = document.createElementNS('http://www.w3.org/2000/svg','text');
+      nLabel.setAttribute('x',cx);
+      nLabel.setAttribute('y',cy+4);
+      nLabel.setAttribute('text-anchor','middle');
+      nLabel.setAttribute('class','nucleus-label');
+      nLabel.textContent = `p⁺ ${Z}`; // show proton count
+      svg.appendChild(nLabel);
+
+      // Orbits & electrons
+      const maxR = size*0.40; // max orbit radius
+      const step = (maxR - (rN+24)) / Math.max(shells.length,1);
+      const durationBase = 24; // seconds
+
+      shells.forEach((count, i)=>{
+        const r = (rN+24) + step*(i+1);
+        const orbit = document.createElementNS('http://www.w3.org/2000/svg','circle');
+        orbit.setAttribute('cx',cx);
+        orbit.setAttribute('cy',cy);
+        orbit.setAttribute('r',r);
+        orbit.setAttribute('class','orbit appear');
+        orbit.style.animationDelay = `${0.2 + i*0.15}s`;
+        svg.appendChild(orbit);
+
+        // rotating group to make electrons orbit
+        const g = document.createElementNS('http://www.w3.org/2000/svg','g');
+        g.setAttribute('transform-origin',`${cx} ${cy}`);
+        const dur = (durationBase - i*2);
+        g.style.animation = `spin ${Math.max(8,dur)}s linear infinite`;
+
+        for(let k=0;k<count;k++){
+          const angle = (k / count) * Math.PI*2; // radians
+          const ex = cx + r * Math.cos(angle);
+          const ey = cy + r * Math.sin(angle);
+          const e = document.createElementNS('http://www.w3.org/2000/svg','circle');
+          e.setAttribute('cx',ex);
+          e.setAttribute('cy',ey);
+          e.setAttribute('r', Math.max(2.2, 4 - i*0.3));
+          e.setAttribute('class','electron');
+          e.style.opacity = 0;
+          // staggered appear
+          setTimeout(()=>{ e.style.opacity = 1; e.classList.add('appear'); }, 400 + i*150 + k*25);
+          g.appendChild(e);
+        }
+        svg.appendChild(g);
+      });
+
+      container.appendChild(svg);
+    }
+
+    // ===== Details modal =====
+    const dlg = document.getElementById('details');
+    const viewer = document.getElementById('viewer');
+
+    function openDetails(el){
+      const lang = document.getElementById('app').dataset.lang || 'en';
+      document.getElementById('elTitle').textContent = `${el.name} (${el.sym})`;
+      document.getElementById('kvZ').textContent = el.Z;
+      // Category label localized
+      const catLabel = I18N[lang].legend[el.cat] || el.cat;
+      const catHTML = `<span style="display:inline-flex;align-items:center;gap:8px"><span class="dot" style="background:${CAT_COLOR[el.cat]}"></span>${catLabel}</span>`;
+      document.getElementById('kvCat').innerHTML = catHTML;
+      document.getElementById('kvP').textContent = `${el.sym} ${el.Z}+`;
+      const shells = bohrShells(el.Z);
+      const eTotal = shells.reduce((a,b)=>a+b,0);
+      document.getElementById('kvE').textContent = eTotal;
+      document.getElementById('kvShells').textContent = shells.join(' • ');
+
+      drawAtom(viewer, el.Z);
+
+      dlg.showModal();
+    }
+    document.getElementById('closeBtn').addEventListener('click',()=>dlg.close());
+    dlg.addEventListener('click',(e)=>{ if(e.target.classList.contains('overlay')) dlg.close(); });
+    window.addEventListener('keydown',(e)=>{ if(e.key==='Escape' && dlg.open) dlg.close(); });
+
+    // ===== boot =====
+    function boot(){
+      setLang('en');
+      renderGrids();
+    }
+    boot();
+  </script>
+</body>
+</html>
